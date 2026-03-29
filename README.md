@@ -177,7 +177,6 @@ The current CLI MVP already supports:
 - automated tests for planner behavior, memory writing, orchestration flow, and resumability
 
 ---
-
 ## Quick Start
 
 ### Requirements
@@ -185,4 +184,147 @@ The current CLI MVP already supports:
 - Python 3.11+
 - Git
 - recommended: virtual environment
+
+### 1. Clone the repository
+
+```bash
+git clone <YOUR_REPOSITORY_URL>
+cd Diary-Agent-CLI
+```
+
+### 2. Create and activate a virtual environment
+
+#### Windows PowerShell
+
+```bash
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+```
+
+#### macOS / Linux
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+```
+
+### 3. Install dependencies
+
+```bash
+pip install -U pip
+pip install -e .
+```
+
+### 4. Initialize the database
+
+```bash
+python -m diary_agent.cli init-db
+```
+
+This creates the local SQLite database and seeds default agent settings.
+
+### 5. Add a few starter topics
+
+```bash
+python -m diary_agent.cli topics add "Sleep" --description "Track sleep quality and consistency."
+python -m diary_agent.cli topics add "Fitness" --description "Exercise, workouts, and general physical activity."
+python -m diary_agent.cli topics add "Job Search" --description "Applications, interviews, and career progress."
+```
+
+### 6. Run the agent
+
+```bash
+python -m diary_agent.cli run
+```
+
+### 7. View today’s diary
+
+```bash
+python -m diary_agent.cli diary today
+```
+
+---
+
+## CLI Commands
+
+Examples:
+
+```bash
+python -m diary_agent.cli init-db
+python -m diary_agent.cli topics list
+python -m diary_agent.cli topics add "Basketball" --description "A casual exercise and hobby topic."
+python -m diary_agent.cli topics show basketball
+python -m diary_agent.cli run
+python -m diary_agent.cli diary today
+python -m diary_agent.cli session show
+```
+
+---
+
+## Local Data and Storage
+
+This project is local-first.
+
+For the current MVP, local data is stored in a SQLite database on your machine. Depending on configuration, the database may live in a repo-local path such as:
+
+```text
+./data/diary_agent.db
+```
+
+The current focus is simplicity and inspectability.
+
+---
+
+## Current Project Status
+
+Diary Agent CLI is currently in an early but real CLI MVP stage.
+
+What is already working:
+
+- explicit orchestration
+- topic-centered memory
+- durable topic history updates
+- resumable daily sessions
+- deterministic diary generation
+- CLI usability
+- core automated test coverage
+
+What is still evolving:
+
+- richer question tone
+- topic fatigue and rotation behavior
+- stronger interruption checkpoints
+- more nuanced extraction logic
+- improved diary polish
+- possible future UI layer after the CLI MVP becomes stronger
+
+---
+
+## Design Principles
+
+- Keep the agent lightweight, not exhausting
+- Keep orchestration explicit, not magical
+- Keep memory structured, not just transcript-based
+- Keep the system local-first and easy to inspect
+- Prefer coherence over feature sprawl
+- Prefer strong product behavior over flashy complexity
+
+---
+
+## Future Directions
+
+Possible next steps:
+
+- topic fatigue / rotation rules
+- stronger interruption recovery
+- golden snapshot tests for question phrasing and diary tone
+- richer extraction logic
+- better topic history browsing
+- optional desktop or web interface after the CLI MVP is stable
+
+---
+
+## License
+
+TBD
 
