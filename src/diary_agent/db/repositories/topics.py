@@ -82,6 +82,15 @@ class TopicRepository:
         )
         return list(self.session.scalars(stmt))
 
+
+    def list_history_for_session(self, session_id: str) -> list[TopicHistoryItem]:
+        stmt = (
+            select(TopicHistoryItem)
+            .where(TopicHistoryItem.session_id == session_id)
+            .order_by(TopicHistoryItem.created_at.asc())
+        )
+        return list(self.session.scalars(stmt))
+
     def create_history_item(
         self,
         topic_id: str,

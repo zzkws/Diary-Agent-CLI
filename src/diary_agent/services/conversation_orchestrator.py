@@ -162,9 +162,7 @@ class ConversationOrchestrator:
     def _finish_session(self, daily_session: DailySession) -> None:
         all_queue = self.queue_repo.list_for_session(daily_session.id)
         topics = {topic.id: topic for topic in self.topic_repo.list_all()}
-        history_items = []
-        for queue_item in all_queue:
-            history_items.extend(self.topic_repo.list_history(queue_item.topic_id, limit=4))
+        history_items = self.topic_repo.list_history_for_session(daily_session.id)
 
         title, summary, body, mood = self.diary_synth.synthesize(daily_session, all_queue, topics, history_items)
         entry = self.diary_repo.upsert_for_session(

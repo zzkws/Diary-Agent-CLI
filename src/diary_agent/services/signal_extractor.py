@@ -79,8 +79,12 @@ class SignalExtractor:
         return f"{title}: {excerpt}" if excerpt else title
 
     def _formal_record(self, title: str, reply: str, mood: str | None, salience: float) -> str:
-        mood_part = f" Mood={mood}." if mood else ""
-        return f"Topic update [{title}] (salience={salience}).{mood_part} User reported: {reply.strip()}"
+        mood_part = mood or "undetected"
+        cleaned = reply.strip()
+        return (
+            f"Record|topic={title}; salience={salience:.2f}; mood={mood_part}; "
+            f"update={cleaned}"
+        )
 
     def _new_topic_candidates(self, lower: str) -> list[TopicCreate]:
         if not any(hint in lower for hint in TOPIC_HINTS):
