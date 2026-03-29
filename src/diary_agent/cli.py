@@ -9,10 +9,12 @@ from rich.table import Table
 
 from diary_agent.db.session import create_all_tables, session_scope
 from diary_agent.db.repositories.diary import DiaryEntryRepository
-from diary_agent.db.repositories.sessions import DailySessionRepository
+from diary_agent.db.repositories.sessions import DailySessionRepository, SessionTopicQueueRepository, SessionTurnRepository
 from diary_agent.db.repositories.topics import TopicRepository
 from diary_agent.db.repositories.settings import AgentSettingRepository
 from diary_agent.domain.schemas import AgentSettingCreate, TopicCreate
+from diary_agent.services.conversation_orchestrator import ConversationOrchestrator
+from diary_agent.services.topic_registry import TopicRegistry
 
 
 app = typer.Typer(help="CLI-first, local-first diary agent.")
@@ -80,14 +82,17 @@ def add_topic(
     title: str,
     description: str = typer.Option("", help="Optional topic description."),
     category: str = typer.Option("", help="Optional topic category."),
+    pinned: bool = typer.Option(False, help="Pin topic so planner prioritizes it."),
 ) -> None:
     """Add a topic."""
     with session_scope() as db_session:
-        topic = TopicRepository(db_session).create(
+        repo = TopicRepository(db_session)
+        topic = TopicRegistry(repo).create_topic(
             TopicCreate(
                 title=title,
                 description=description,
                 category=category or None,
+                is_pinned=pinned,
             )
         )
     console.print(f"Created topic {topic.slug} ({topic.id}).")
@@ -99,6 +104,7 @@ def show_topic(identifier: str) -> None:
     with session_scope() as db_session:
         repo = TopicRepository(db_session)
         topic = repo.get(identifier)
+        history = repo.list_history(topic.id, limit=5) if topic else []
 
     if topic is None:
         console.print("Topic not found.")
@@ -125,6 +131,7 @@ def show_topic(identifier: str) -> None:
             "last_asked_at": topic.last_asked_at,
             "last_updated_at": topic.last_updated_at,
             "last_touched_at": topic.last_touched_at,
+            "recent_history": [item.agent_record for item in history],
         }
     )
 
@@ -147,7 +154,11 @@ def show_session(identifier: Optional[str] = None) -> None:
     """Show a session by date string or ID."""
     with session_scope() as db_session:
         repo = DailySessionRepository(db_session)
+        queue_repo = SessionTopicQueueRepository(db_session)
+        turns_repo = SessionTurnRepository(db_session)
         daily_session = repo.get(identifier) if identifier else repo.get_by_date(date.today())
+        queue = queue_repo.list_for_session(daily_session.id) if daily_session else []
+        turns = turns_repo.list_for_session(daily_session.id) if daily_session else []
 
     if daily_session is None:
         console.print("Session not found.")
@@ -164,8 +175,37 @@ def show_session(identifier: Optional[str] = None) -> None:
             "finished_at": daily_session.finished_at,
             "created_at": daily_session.created_at,
             "updated_at": daily_session.updated_at,
+            "queue": [
+                {
+                    "topic_id": item.topic_id,
+                    "status": item.status,
+                    "order": item.queue_order,
+                    "asked_turn_count": item.asked_turn_count,
+                    "reason": item.selection_reason,
+                }
+                for item in queue
+            ],
+            "turn_count": len(turns),
         }
     )
+
+
+@app.command("run")
+def run_session(session_date: Optional[str] = typer.Option(None, help="Optional ISO date override (YYYY-MM-DD).")) -> None:
+    """Run the daily interview loop end-to-end."""
+    target_date = date.fromisoformat(session_date) if session_date else date.today()
+    with session_scope() as db_session:
+        orchestrator = ConversationOrchestrator(
+            session_repo=DailySessionRepository(db_session),
+            queue_repo=SessionTopicQueueRepository(db_session),
+            topic_repo=TopicRepository(db_session),
+            settings_repo=AgentSettingRepository(db_session),
+            turn_repo=SessionTurnRepository(db_session),
+            diary_repo=DiaryEntryRepository(db_session),
+            console=console,
+        )
+        session = orchestrator.run(target_date)
+    console.print(f"Session complete ({session.id}).")
 
 
 if __name__ == "__main__":

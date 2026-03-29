@@ -86,4 +86,32 @@ class TopicSignalExtraction:
     mood: Optional[str] = None
     followup_needed: bool = False
     followup_reason: str = ""
+    formal_memory_record: str = ""
     new_topic_candidates: list[TopicCreate] = field(default_factory=list)
+
+
+@dataclass(slots=True)
+class PlannerTopicCandidate:
+    topic_id: str
+    title: str
+    score: float
+    layer: str
+    reason: str
+    cadence_due: bool = False
+    days_since_asked: Optional[int] = None
+
+
+@dataclass(slots=True)
+class SessionPlan:
+    ordered_topics: list[PlannerTopicCandidate]
+    max_topics: int
+
+
+@dataclass(slots=True)
+class TopicLifecycleAdjustment:
+    state: Optional[TopicState] = None
+    priority_mode: Optional[PriorityMode] = None
+    cadence_days: Optional[int] = None
+    importance_score: Optional[float] = None
+    confidence_score: Optional[float] = None
+    status_summary: Optional[str] = None
