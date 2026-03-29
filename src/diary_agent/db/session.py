@@ -14,7 +14,7 @@ settings = get_settings()
 settings.database_path.parent.mkdir(parents=True, exist_ok=True)
 
 engine = create_engine(settings.database_url, future=True)
-SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
+SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True, expire_on_commit=False)
 
 
 def create_all_tables() -> None:

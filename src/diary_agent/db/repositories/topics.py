@@ -3,10 +3,11 @@ from __future__ import annotations
 import re
 from dataclasses import asdict
 
-from sqlalchemy import Select, select
+from sqlalchemy import Select, desc, select
 from sqlalchemy.orm import Session
 
-from diary_agent.db.models import Topic
+from diary_agent.db.models import Topic, TopicHistoryItem
+from diary_agent.domain.enums import TopicState
 from diary_agent.domain.schemas import TopicCreate, TopicUpdate
 
 
@@ -22,6 +23,14 @@ class TopicRepository:
 
     def list_all(self) -> list[Topic]:
         stmt: Select[tuple[Topic]] = select(Topic).order_by(Topic.created_at.desc())
+        return list(self.session.scalars(stmt))
+
+    def list_open_topics(self) -> list[Topic]:
+        stmt = (
+            select(Topic)
+            .where(Topic.state.in_([TopicState.ACTIVE.value, TopicState.DORMANT.value, TopicState.CANDIDATE.value]))
+            .order_by(desc(Topic.is_pinned), desc(Topic.last_touched_at), Topic.created_at.desc())
+        )
         return list(self.session.scalars(stmt))
 
     def get(self, identifier: str) -> Topic | None:
@@ -63,6 +72,44 @@ class TopicRepository:
         self.session.add(topic)
         self.session.flush()
         return topic
+
+    def list_history(self, topic_id: str, limit: int = 20) -> list[TopicHistoryItem]:
+        stmt = (
+            select(TopicHistoryItem)
+            .where(TopicHistoryItem.topic_id == topic_id)
+            .order_by(TopicHistoryItem.created_at.desc())
+            .limit(limit)
+        )
+        return list(self.session.scalars(stmt))
+
+    def create_history_item(
+        self,
+        topic_id: str,
+        session_id: str,
+        turn_id: str,
+        item_date,
+        question_text: str,
+        user_reply_text: str,
+        agent_record: str,
+        mood: str | None,
+        salience_score: float,
+        event_type: str = "topic_update",
+    ) -> TopicHistoryItem:
+        item = TopicHistoryItem(
+            topic_id=topic_id,
+            session_id=session_id,
+            turn_id=turn_id,
+            date=item_date,
+            question_text=question_text,
+            user_reply_text=user_reply_text,
+            agent_record=agent_record,
+            event_type=event_type,
+            mood=mood,
+            salience_score=salience_score,
+        )
+        self.session.add(item)
+        self.session.flush()
+        return item
 
     def _next_slug(self, title: str) -> str:
         base_slug = slugify(title)
