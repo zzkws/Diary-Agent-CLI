@@ -1,330 +1,215 @@
 # Diary Agent CLI
 
-A local-first, CLI-first, single-agent diary system built around long-term topic memory.
+CLI-first, local-first diary agent centered around **long-lived life topics** and a lightweight daily interview flow.
 
-Instead of asking users to manually write long journal entries every day, Diary Agent CLI acts like a lightweight nightly interviewer: it remembers the important topics in a user’s life, asks a few relevant questions, turns short replies into durable memory records, and synthesizes a meaningful diary entry for the day.
-
----
-
-## Overview
-
-Diary Agent CLI explores a different way to keep a diary.
-
-Most journaling tools still expect the user to do the hardest part: sit down, remember the day, organize thoughts, and write. That works in theory, but in practice it is often too cognitively expensive to sustain.
-
-This project takes a different approach:
-
-- the user does **not** need to write a full journal entry
-- the agent asks **4–5 lightweight questions**
-- the system remembers **long-term life topics**
-- the interaction updates **topic history and recent status**
-- the system generates a **daily diary entry** from the session
-
-The goal is to reduce the cognitive burden of journaling while preserving memory, continuity, and reflection over time.
+The product is designed to feel like a structured nightly check-in (not a freeform chatbot):
+- select relevant topics for today,
+- ask short natural questions,
+- turn replies into durable memory,
+- synthesize a daily diary entry.
 
 ---
 
-## Product Idea
+## Current MVP status
 
-Diary Agent CLI is **not** a generic chatbot.
+This repository is currently at an **MVP core / early alpha** stage.
 
-It is a structured but warm diary agent designed around three core ideas.
+Implemented today:
+- SQLAlchemy-backed local data model (topics, session queue, turns, history, diary entry)
+- Deterministic service pipeline:
+  - session planner
+  - question composer
+  - signal extractor
+  - memory writer
+  - diary synthesizer
+  - conversation orchestrator
+- CLI commands for setup, topic management, session execution, and inspection
+- Basic tests for planner, memory writer, orchestration flow, and resumability
 
-### 1. Topic-centered memory
-
-The system does not treat raw messages as the main unit of memory.
-
-Instead, it models a user’s life as a set of long-lived topics, such as:
-
-- sleep
-- fitness
-- basketball
-- study
-- job search
-- a short-term group project
-
-Each topic can carry:
-
-- a title
-- a long-term description
-- a recent status summary
-- a lifecycle state such as active, dormant, or archived
-- a history of meaningful updates over time
-
-This makes the system more like a personal memory structure than a simple transcript log.
-
-### 2. Lightweight daily interview
-
-Each session is meant to feel light.
-
-The agent:
-
-- selects a few relevant topics for the day
-- asks short, natural questions
-- may ask one follow-up if needed
-- asks one final free-share question near the end
-
-The user can respond naturally and briefly. The system handles the structure.
-
-### 3. Diary synthesis with continuity
-
-The system converts the interaction into:
-
-- topic-level memory records
-- updated topic summaries
-- a structured diary entry for the day
-
-This means the diary is not just a copy of the chat transcript. It becomes a cleaner and more meaningful personal record.
+Not implemented yet:
+- External LLM integration (Gemini/Anthropic are not wired yet)
+- Advanced error recovery / production hardening
+- Web UI (intentionally out of scope)
 
 ---
 
-## Why this project exists
+## High-level architecture (current)
 
-Writing a diary is valuable, but it is also tiring.
+The runtime flow is explicit and inspectable:
 
-Many people do not stop journaling because they do not care. They stop because the process asks for too much structure, too much energy, and too much consistency at the wrong moment of the day.
+1. `SessionPlanner` selects topics for the day.
+2. `QuestionComposer` produces deterministic prompts.
+3. `ConversationOrchestrator` runs the turn loop.
+4. `SignalExtractor` converts user replies into structured signals.
+5. `MemoryWriter` persists topic history and updates topic state/metadata.
+6. `DiarySynthesizer` generates the final markdown diary entry.
 
-This project is an attempt to make journaling easier by shifting some of the burden from the user to the agent.
-
-The user brings short answers.  
-The system brings:
-
-- continuity
-- memory structure
-- topic tracking
-- diary generation
+All state is persisted locally in SQLite (`DailySession`, `SessionTurn`, `SessionTopicQueue`, `TopicHistoryItem`, `DiaryEntry`).
 
 ---
 
-## Core Concepts
+## Requirements
 
-### Topic
-
-A long-lived life memory unit.
-
-Examples:
-
-- Fitness
-- Basketball
-- Sleep
-- Linear Algebra
-- Internship Search
-
-A topic stores both long-term identity and recent state.
-
-### Topic History Item
-
-A durable, topic-level memory record.
-
-This is not just the user’s raw reply. It is a more formal record of what happened for that topic on a given day.
-
-### Daily Session
-
-The orchestration container for one day’s interaction.
-
-It tracks:
-
-- which topics were selected
-- which topic is currently being discussed
-- what has already been asked
-- whether the session was interrupted or resumed
-- when the final diary should be generated
-
-### Diary Entry
-
-The final synthesized daily record generated from a session.
+- Python **3.11+**
+- macOS / Linux / Windows
+- Internet access for first-time dependency installation (`pip install`)
 
 ---
 
-## Architecture
+## Quickstart (first local run)
 
-This project is intentionally designed as:
-
-- **single-agent**
-- **explicit orchestration**
-- **local-first**
-- **CLI-first**
-- **deterministic-first**
-
-It does **not** use a multi-agent architecture.  
-It does **not** depend on a web UI for the MVP.  
-It does **not** hide core behavior behind opaque prompt logic.
-
-The current architecture is an inspectable pipeline:
-
-- **Session Planner** → selects today’s topics
-- **Question Composer** → generates lightweight questions
-- **Signal Extractor** → turns replies into structured signals
-- **Memory Writer** → updates topic memory and history
-- **Diary Synthesizer** → creates the day’s diary entry
-- **Conversation Orchestrator** → runs the session as an explicit state machine
-
----
-
-## What the MVP already does
-
-The current CLI MVP already supports:
-
-- local SQLite persistence
-- topic lifecycle management
-- layered topic selection for each daily session
-- lightweight question generation
-- deterministic signal extraction
-- durable topic history writing
-- resumable daily sessions
-- diary generation from the current session
-- CLI commands for setup, topic inspection, session running, and diary viewing
-- automated tests for planner behavior, memory writing, orchestration flow, and resumability
-
----
-## Quick Start
-
-### Requirements
-
-- Python 3.11+
-- Git
-- recommended: virtual environment
-
-### 1. Clone the repository
+### 1) Clone
 
 ```bash
-git clone <YOUR_REPOSITORY_URL>
+git clone <YOUR_REPO_URL>
 cd Diary-Agent-CLI
 ```
 
-### 2. Create and activate a virtual environment
-
-#### Windows PowerShell
-
-```bash
-python -m venv .venv
-.venv\Scripts\Activate.ps1
-```
+### 2) Create and activate a virtual environment
 
 #### macOS / Linux
 
 ```bash
-python -m venv .venv
+python3 -m venv .venv
 source .venv/bin/activate
 ```
 
-### 3. Install dependencies
+#### Windows (PowerShell)
 
-```bash
-pip install -U pip
-pip install -e .
+```powershell
+py -m venv .venv
+.venv\Scripts\Activate.ps1
 ```
 
-### 4. Initialize the database
+### 3) Install dependencies
 
 ```bash
-python -m diary_agent.cli init-db
+python -m pip install --upgrade pip
+python -m pip install -e .
 ```
 
-This creates the local SQLite database and seeds default agent settings.
-
-### 5. Add a few starter topics
+Optional (dev/test tools):
 
 ```bash
-python -m diary_agent.cli topics add "Sleep" --description "Track sleep quality and consistency."
-python -m diary_agent.cli topics add "Fitness" --description "Exercise, workouts, and general physical activity."
-python -m diary_agent.cli topics add "Job Search" --description "Applications, interviews, and career progress."
+python -m pip install -e ".[dev]"
 ```
 
-### 6. Run the agent
+### 4) (Recommended) pin database path for this repo
+
+By default, the app uses a relative DB path (`data/diary_agent.db`) from your current working directory.
+
+To avoid accidentally creating multiple DB files from different directories, set `DIARY_AGENT_DB_PATH` explicitly:
+
+#### macOS / Linux
 
 ```bash
-python -m diary_agent.cli run
+export DIARY_AGENT_DB_PATH="$PWD/data/diary_agent.db"
 ```
 
-### 7. View today’s diary
+#### Windows (PowerShell)
+
+```powershell
+$env:DIARY_AGENT_DB_PATH = "$PWD/data/diary_agent.db"
+```
+
+### 5) Initialize database
 
 ```bash
-python -m diary_agent.cli diary today
+diary-agent init-db
+```
+
+If `diary-agent` script is not found in your shell, use:
+
+```bash
+PYTHONPATH=src python -m diary_agent.cli init-db
+```
+
+### 6) Add starter topics
+
+```bash
+diary-agent topics add "Health" --description "Sleep, exercise, energy" --pinned
+diary-agent topics add "Career" --description "Projects and focus"
+diary-agent topics add "Relationships" --description "Family and friends"
+```
+
+### 7) Run today’s session
+
+```bash
+diary-agent run
+```
+
+You can also run for a specific date:
+
+```bash
+diary-agent run --session-date 2026-03-30
+```
+
+### 8) Inspect outputs
+
+```bash
+diary-agent topics list
+diary-agent topics show health
+diary-agent session show
+diary-agent diary today
 ```
 
 ---
 
-## CLI Commands
+## CLI command overview
 
-Examples:
+Top-level:
 
 ```bash
-python -m diary_agent.cli init-db
-python -m diary_agent.cli topics list
-python -m diary_agent.cli topics add "Basketball" --description "A casual exercise and hobby topic."
-python -m diary_agent.cli topics show basketball
-python -m diary_agent.cli run
-python -m diary_agent.cli diary today
-python -m diary_agent.cli session show
+diary-agent --help
 ```
 
+Main commands:
+- `init-db`
+- `run [--session-date YYYY-MM-DD]`
+- `topics list`
+- `topics add <title> [--description ...] [--category ...] [--pinned]`
+- `topics show <id-or-slug>`
+- `session show [id-or-date]`
+- `diary today`
+
 ---
 
-## Local Data and Storage
+## Caveats for first-time users
 
-This project is local-first.
+1. **README vs code drift (fixed in this file):** this README now reflects the implemented MVP behavior.
+2. **DB path behavior:** default DB path is relative; set `DIARY_AGENT_DB_PATH` for consistency across shells/working directories.
+3. **`--session-date` must be valid ISO format (`YYYY-MM-DD`)**; invalid values currently raise an error rather than a friendly message.
+4. **Deterministic heuristics:** questioning/extraction/diary are deterministic and useful, but still heuristic (LLM integration is planned, not yet shipped).
 
-For the current MVP, local data is stored in a SQLite database on your machine. Depending on configuration, the database may live in a repo-local path such as:
+---
 
-```text
-./data/diary_agent.db
+## Running tests
+
+```bash
+pytest -q
 ```
 
-The current focus is simplicity and inspectability.
+Current tests cover:
+- session planning behavior
+- memory writing behavior
+- end-to-end orchestration flow
+- resumable session behavior
 
 ---
 
-## Current Project Status
+## Project layout (key paths)
 
-Diary Agent CLI is currently in an early but real CLI MVP stage.
-
-What is already working:
-
-- explicit orchestration
-- topic-centered memory
-- durable topic history updates
-- resumable daily sessions
-- deterministic diary generation
-- CLI usability
-- core automated test coverage
-
-What is still evolving:
-
-- richer question tone
-- topic fatigue and rotation behavior
-- stronger interruption checkpoints
-- more nuanced extraction logic
-- improved diary polish
-- possible future UI layer after the CLI MVP becomes stronger
+- `src/diary_agent/cli.py` — Typer CLI entry
+- `src/diary_agent/services/` — orchestration and core behavior
+- `src/diary_agent/db/models.py` — SQLAlchemy models
+- `src/diary_agent/db/repositories/` — thin data access repositories
+- `tests/` — MVP behavior tests
 
 ---
 
-## Design Principles
+## Roadmap (near-term)
 
-- Keep the agent lightweight, not exhausting
-- Keep orchestration explicit, not magical
-- Keep memory structured, not just transcript-based
-- Keep the system local-first and easy to inspect
-- Prefer coherence over feature sprawl
-- Prefer strong product behavior over flashy complexity
-
----
-
-## Future Directions
-
-Possible next steps:
-
-- topic fatigue / rotation rules
-- stronger interruption recovery
-- golden snapshot tests for question phrasing and diary tone
-- richer extraction logic
-- better topic history browsing
-- optional desktop or web interface after the CLI MVP is stable
-
----
-
-## License
-
-TBD
-
+- Add pluggable external LLM providers (Gemini first, then Anthropic)
+- Improve runtime checkpointing / interruption recovery
+- Expand CLI UX guardrails and error messages
+- Continue memory quality and diary quality tuning
