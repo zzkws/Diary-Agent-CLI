@@ -29,6 +29,9 @@ class ConversationOrchestrator:
         turn_repo: SessionTurnRepository,
         diary_repo: DiaryEntryRepository,
         console: Console,
+        question_composer: QuestionComposer | None = None,
+        signal_extractor: SignalExtractor | None = None,
+        diary_synthesizer: DiarySynthesizer | None = None,
     ) -> None:
         self.session_repo = session_repo
         self.queue_repo = queue_repo
@@ -38,11 +41,11 @@ class ConversationOrchestrator:
         self.diary_repo = diary_repo
         self.console = console
 
-        self.extractor = SignalExtractor()
-        self.question_composer = QuestionComposer()
+        self.extractor = signal_extractor or SignalExtractor()
+        self.question_composer = question_composer or QuestionComposer()
         self.topic_registry = TopicRegistry(topic_repo)
         self.memory_writer = MemoryWriter(topic_repo, queue_repo, self.topic_registry)
-        self.diary_synth = DiarySynthesizer()
+        self.diary_synth = diary_synthesizer or DiarySynthesizer()
 
     def run(self, session_date: date) -> DailySession:
         daily_session = self._load_or_create_session(session_date)

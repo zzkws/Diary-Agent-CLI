@@ -3,9 +3,13 @@ from __future__ import annotations
 from collections import Counter
 
 from diary_agent.db.models import DailySession, SessionTopicQueue, Topic, TopicHistoryItem
+from diary_agent.llm.base import LLMProvider, LLMRequest
 
 
 class DiarySynthesizer:
+    def __init__(self, llm_provider: LLMProvider | None = None) -> None:
+        self.llm_provider = llm_provider
+
     def synthesize(
         self,
         daily_session: DailySession,
@@ -34,7 +38,7 @@ class DiarySynthesizer:
                 unique_topics.append(topic.title)
 
         new_topics = [topics_by_id[item.topic_id].title for item in queue_items if item.was_new_topic and item.topic_id in topics_by_id]
-        summary = f"Covered {len(unique_topics)} topics today, led by {', '.join(unique_topics[:3])}."
+        deterministic_summary = f"Covered {len(unique_topics)} topics today, led by {', '.join(unique_topics[:3])}."
 
         continuity_lines = [
             "- Carry unresolved decisions into tomorrow's check-in.",
@@ -42,6 +46,8 @@ class DiarySynthesizer:
         ]
         if new_topics:
             continuity_lines.append(f"- New topics captured: {', '.join(new_topics)}.")
+
+        summary = self._llm_summary_or_fallback(deterministic_summary, top_updates)
 
         body = "\n".join(
             [
@@ -60,3 +66,22 @@ class DiarySynthesizer:
 
         title = f"Daily reflection: {daily_session.session_date.isoformat()}"
         return title, summary, body, mood
+
+    def _llm_summary_or_fallback(self, fallback: str, top_updates: list[TopicHistoryItem]) -> str:
+        if self.llm_provider is None or not self.llm_provider.is_available():
+            return fallback
+
+        updates = "\n".join([f"- {item.agent_record}" for item in top_updates])
+        prompt = (
+            "Write a concise 1-2 sentence daily diary summary from these updates. "
+            "Keep it grounded and reflective, no poetry.\n"
+            f"Updates:\n{updates}"
+        )
+        generated = self.llm_provider.generate_text(
+            LLMRequest(
+                prompt=prompt,
+                system_instruction="You write concise daily summary notes.",
+                temperature=0.2,
+            )
+        ).strip()
+        return generated if generated else fallback

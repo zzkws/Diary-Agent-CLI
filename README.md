@@ -16,7 +16,7 @@ This repository is currently at an **MVP core / early alpha** stage.
 
 Implemented today:
 - SQLAlchemy-backed local data model (topics, session queue, turns, history, diary entry)
-- Deterministic service pipeline:
+- Explicit service pipeline:
   - session planner
   - question composer
   - signal extractor
@@ -24,10 +24,11 @@ Implemented today:
   - diary synthesizer
   - conversation orchestrator
 - CLI commands for setup, topic management, session execution, and inspection
-- Basic tests for planner, memory writer, orchestration flow, and resumability
+- Deterministic mode by default
+- Optional Gemini-powered generation/extraction with safe deterministic fallback
 
 Not implemented yet:
-- External LLM integration (Gemini/Anthropic are not wired yet)
+- Full Anthropic provider (placeholder only)
 - Advanced error recovery / production hardening
 - Web UI (intentionally out of scope)
 
@@ -35,14 +36,21 @@ Not implemented yet:
 
 ## High-level architecture (current)
 
-The runtime flow is explicit and inspectable:
+Runtime flow is explicit and inspectable:
 
 1. `SessionPlanner` selects topics for the day.
-2. `QuestionComposer` produces deterministic prompts.
+2. `QuestionComposer` produces opening/topic/follow-up/free-share/closing prompts.
 3. `ConversationOrchestrator` runs the turn loop.
-4. `SignalExtractor` converts user replies into structured signals.
-5. `MemoryWriter` persists topic history and updates topic state/metadata.
+4. `SignalExtractor` converts replies into structured memory signals.
+5. `MemoryWriter` persists history and updates topic state/metadata.
 6. `DiarySynthesizer` generates the final markdown diary entry.
+
+LLM boundary (`src/diary_agent/llm/`):
+- provider abstraction + request type
+- deterministic provider (`stub`)
+- Gemini provider
+- Anthropic placeholder
+- provider factory with automatic fallback
 
 All state is persisted locally in SQLite (`DailySession`, `SessionTurn`, `SessionTopicQueue`, `TopicHistoryItem`, `DiaryEntry`).
 
@@ -155,6 +163,47 @@ diary-agent diary today
 
 ---
 
+## LLM mode configuration
+
+### Environment variables
+
+The app reads these variables at runtime:
+
+- `DIARY_AGENT_LLM_PROVIDER` (`stub`, `gemini`, `anthropic`)
+- `DIARY_AGENT_LLM_MODEL` (provider model id)
+- `GEMINI_API_KEY`
+- `ANTHROPIC_API_KEY`
+
+### Deterministic mode (default)
+
+No API keys required:
+
+```bash
+export DIARY_AGENT_LLM_PROVIDER=stub
+```
+
+### Gemini-enabled mode
+
+```bash
+export DIARY_AGENT_LLM_PROVIDER=gemini
+export DIARY_AGENT_LLM_MODEL=gemini-1.5-flash
+export GEMINI_API_KEY="<your_key_here>"
+```
+
+Then run normally:
+
+```bash
+diary-agent run
+```
+
+### Fallback behavior
+
+If Gemini is selected but `GEMINI_API_KEY` is missing/invalid or request fails, the app **falls back automatically** to deterministic behavior.
+
+Anthropic is currently a placeholder provider and also falls back to deterministic mode.
+
+---
+
 ## CLI command overview
 
 Top-level:
@@ -176,10 +225,10 @@ Main commands:
 
 ## Caveats for first-time users
 
-1. **README vs code drift (fixed in this file):** this README now reflects the implemented MVP behavior.
-2. **DB path behavior:** default DB path is relative; set `DIARY_AGENT_DB_PATH` for consistency across shells/working directories.
-3. **`--session-date` must be valid ISO format (`YYYY-MM-DD`)**; invalid values currently raise an error rather than a friendly message.
-4. **Deterministic heuristics:** questioning/extraction/diary are deterministic and useful, but still heuristic (LLM integration is planned, not yet shipped).
+1. **DB path behavior:** default DB path is relative; set `DIARY_AGENT_DB_PATH` for consistency across shells/working directories.
+2. **`--session-date` must be valid ISO format (`YYYY-MM-DD`)**; invalid values currently raise an error rather than a friendly message.
+3. **Gemini usage is best-effort:** API/network failures degrade to deterministic mode.
+4. **Anthropic provider is not implemented yet** (placeholder + fallback).
 
 ---
 
@@ -199,8 +248,9 @@ Current tests cover:
 
 ## Project layout (key paths)
 
-- `src/diary_agent/cli.py` — Typer CLI entry
+- `src/diary_agent/cli.py` — Typer CLI entry and wiring
 - `src/diary_agent/services/` — orchestration and core behavior
+- `src/diary_agent/llm/` — provider abstraction and concrete providers
 - `src/diary_agent/db/models.py` — SQLAlchemy models
 - `src/diary_agent/db/repositories/` — thin data access repositories
 - `tests/` — MVP behavior tests
@@ -209,7 +259,7 @@ Current tests cover:
 
 ## Roadmap (near-term)
 
-- Add pluggable external LLM providers (Gemini first, then Anthropic)
+- Implement Anthropic provider fully
 - Improve runtime checkpointing / interruption recovery
 - Expand CLI UX guardrails and error messages
 - Continue memory quality and diary quality tuning
