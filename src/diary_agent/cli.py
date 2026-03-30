@@ -7,12 +7,19 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
+from diary_agent.config import get_settings
 from diary_agent.db.session import create_all_tables, session_scope
 from diary_agent.db.repositories.diary import DiaryEntryRepository
-from diary_agent.db.repositories.sessions import DailySessionRepository
+from diary_agent.db.repositories.sessions import DailySessionRepository, SessionTopicQueueRepository, SessionTurnRepository
 from diary_agent.db.repositories.topics import TopicRepository
 from diary_agent.db.repositories.settings import AgentSettingRepository
 from diary_agent.domain.schemas import AgentSettingCreate, TopicCreate
+from diary_agent.llm import build_provider
+from diary_agent.services.conversation_orchestrator import ConversationOrchestrator
+from diary_agent.services.diary_synthesizer import DiarySynthesizer
+from diary_agent.services.question_composer import QuestionComposer
+from diary_agent.services.signal_extractor import SignalExtractor
+from diary_agent.services.topic_registry import TopicRegistry
 
 
 app = typer.Typer(help="CLI-first, local-first diary agent.")
@@ -30,13 +37,14 @@ console = Console()
 def init_db() -> None:
     """Create tables and seed default settings if missing."""
     create_all_tables()
+    app_settings = get_settings()
     with session_scope() as db_session:
         settings_repo = AgentSettingRepository(db_session)
         if settings_repo.get_default() is None:
             settings_repo.create_default(
                 AgentSettingCreate(
-                    llm_provider="stub",
-                    llm_model="deterministic-v1",
+                    llm_provider=app_settings.llm_provider,
+                    llm_model=app_settings.llm_model,
                     temperature=0.2,
                     max_topics_per_session=5,
                     max_followups_per_topic=1,
@@ -80,14 +88,17 @@ def add_topic(
     title: str,
     description: str = typer.Option("", help="Optional topic description."),
     category: str = typer.Option("", help="Optional topic category."),
+    pinned: bool = typer.Option(False, help="Pin topic so planner prioritizes it."),
 ) -> None:
     """Add a topic."""
     with session_scope() as db_session:
-        topic = TopicRepository(db_session).create(
+        repo = TopicRepository(db_session)
+        topic = TopicRegistry(repo).create_topic(
             TopicCreate(
                 title=title,
                 description=description,
                 category=category or None,
+                is_pinned=pinned,
             )
         )
     console.print(f"Created topic {topic.slug} ({topic.id}).")
@@ -99,6 +110,7 @@ def show_topic(identifier: str) -> None:
     with session_scope() as db_session:
         repo = TopicRepository(db_session)
         topic = repo.get(identifier)
+        history = repo.list_history(topic.id, limit=5) if topic else []
 
     if topic is None:
         console.print("Topic not found.")
@@ -125,6 +137,7 @@ def show_topic(identifier: str) -> None:
             "last_asked_at": topic.last_asked_at,
             "last_updated_at": topic.last_updated_at,
             "last_touched_at": topic.last_touched_at,
+            "recent_history": [item.agent_record for item in history],
         }
     )
 
@@ -147,7 +160,11 @@ def show_session(identifier: Optional[str] = None) -> None:
     """Show a session by date string or ID."""
     with session_scope() as db_session:
         repo = DailySessionRepository(db_session)
+        queue_repo = SessionTopicQueueRepository(db_session)
+        turns_repo = SessionTurnRepository(db_session)
         daily_session = repo.get(identifier) if identifier else repo.get_by_date(date.today())
+        queue = queue_repo.list_for_session(daily_session.id) if daily_session else []
+        turns = turns_repo.list_for_session(daily_session.id) if daily_session else []
 
     if daily_session is None:
         console.print("Session not found.")
@@ -164,8 +181,43 @@ def show_session(identifier: Optional[str] = None) -> None:
             "finished_at": daily_session.finished_at,
             "created_at": daily_session.created_at,
             "updated_at": daily_session.updated_at,
+            "queue": [
+                {
+                    "topic_id": item.topic_id,
+                    "status": item.status,
+                    "order": item.queue_order,
+                    "asked_turn_count": item.asked_turn_count,
+                    "reason": item.selection_reason,
+                }
+                for item in queue
+            ],
+            "turn_count": len(turns),
         }
     )
+
+
+@app.command("run")
+def run_session(session_date: Optional[str] = typer.Option(None, help="Optional ISO date override (YYYY-MM-DD).")) -> None:
+    """Run the daily interview loop end-to-end."""
+    target_date = date.fromisoformat(session_date) if session_date else date.today()
+    app_settings = get_settings()
+    llm_provider = build_provider(app_settings)
+
+    with session_scope() as db_session:
+        orchestrator = ConversationOrchestrator(
+            session_repo=DailySessionRepository(db_session),
+            queue_repo=SessionTopicQueueRepository(db_session),
+            topic_repo=TopicRepository(db_session),
+            settings_repo=AgentSettingRepository(db_session),
+            turn_repo=SessionTurnRepository(db_session),
+            diary_repo=DiaryEntryRepository(db_session),
+            console=console,
+            question_composer=QuestionComposer(llm_provider=llm_provider),
+            signal_extractor=SignalExtractor(llm_provider=llm_provider),
+            diary_synthesizer=DiarySynthesizer(llm_provider=llm_provider),
+        )
+        session = orchestrator.run(target_date)
+    console.print(f"Session complete ({session.id}).")
 
 
 if __name__ == "__main__":

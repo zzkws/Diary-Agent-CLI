@@ -9,3 +9,6 @@ dist/
 data/*.db
 data/*.sqlite
 data/*.sqlite3
+.DS_Store
+.idea/
+.vscode/
